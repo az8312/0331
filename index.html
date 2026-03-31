@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>單字闖關大冒險 - 聽音練打版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Lexend:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap');
+        
+        :root {
+            --bg-color: #f0f4f8;
+            --card-bg: #ffffff;
+            --primary: #ffcf4d;
+            --secondary: #4ade80;
+            --accent: #f87171;
+            --border: #1f2937;
+        }
+
+        body {
+            font-family: 'Lexend', 'Noto Sans TC', sans-serif;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(var(--border) 1px, transparent 1px),
+                linear-gradient(to right, #e5e7eb 1px, transparent 1px),
+                linear-gradient(to bottom, #e5e7eb 1px, transparent 1px);
+            background-size: 40px 40px, 20px 20px, 20px 20px;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .game-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+        }
+
+        .cute-card {
+            background: var(--card-bg);
+            border: 5px solid var(--border);
+            border-radius: 3rem;
+            box-shadow: 12px 12px 0px var(--border);
+            width: 100%;
+            max-width: 1100px;
+            height: 100%;
+            max-height: 650px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .horizontal-layout {
+            display: flex;
+            flex: 1;
+            flex-direction: row;
+            overflow: hidden;
+        }
+
+        .left-panel {
+            flex: 1.2;
+            background: #fff9e6;
+            border-right: 5px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .right-panel {
+            flex: 1;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            border: 4px solid var(--border);
+            box-shadow: 6px 6px 0px var(--border);
+            transition: all 0.1s;
+        }
+
+        .btn-primary:active:not(:disabled) {
+            transform: translate(3px, 3px);
+            box-shadow: 3px 3px 0px var(--border);
+        }
+
+        .input-box {
+            border: 3.5px solid var(--border);
+            border-radius: 1.25rem;
+            padding: 10px 16px;
+            font-weight: bold;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        /* 語音播放時的動畫 */
+        @keyframes pulse-speaker {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); color: #fbbf24; }
+            100% { transform: scale(1); }
+        }
+        .speaking {
+            animation: pulse-speaker 0.5s infinite;
+        }
+
+        @keyframes pop-error {
+            0% { transform: scale(0); opacity: 0; }
+            40% { transform: scale(1.3); opacity: 1; }
+            60% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(0.8); opacity: 0; }
+        }
+
+        .error-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12rem;
+            z-index: 50;
+            pointer-events: none;
+            display: none;
+            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.2));
+        }
+
+        .error-active {
+            display: block;
+            animation: pop-error 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        .status-pill {
+            border: 3px solid var(--border);
+            padding: 6px 16px;
+            border-radius: 999px;
+            font-weight: 800;
+        }
+
+        .admin-modal {
+            position: absolute;
+            inset: 2rem;
+            background: white;
+            border: 5px solid var(--border);
+            border-radius: 2rem;
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+            padding: 2rem;
+            box-shadow: 0 0 0 1000px rgba(0,0,0,0.5);
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+    </style>
+</head>
+<body onload="initApp()">
+
+    <div class="game-container">
+        <div id="app" class="w-full h-full flex items-center justify-center">
+            
+            <div id="error-pop" class="error-overlay">❌</div>
+
+            <!-- 管理員介面 -->
+            <div id="admin-panel" class="admin-modal">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-3xl font-black">⚙️ 勇者基地：帳號管理中心</h2>
+                    <button onclick="toggleAdminPanel(false)" class="text-4xl font-bold hover:scale-110">✕</button>
+                </div>
+                <div class="overflow-y-auto flex-grow border-4 border-gray-800 rounded-2xl p-4 bg-gray-50">
+                    <table class="w-full text-left">
+                        <thead class="sticky top-0 bg-gray-50 border-b-4 border-gray-800">
+                            <tr>
+                                <th class="p-3 font-black">帳號</th>
+                                <th class="p-3 font-black">密碼</th>
+                                <th class="p-3 font-black">當前進度</th>
+                                <th class="p-3 font-black text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-user-list"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 登入與註冊畫面 -->
+            <div id="auth-screen" class="cute-card flex flex-col items-center justify-center p-8">
+                <div class="text-6xl mb-2" id="auth-emoji">🔐</div>
+                <h1 class="text-3xl font-black mb-6" style="font-family: 'ZCOOL KuaiLe', sans-serif;">單字挑戰：勇者基地</h1>
+                
+                <div class="flex gap-6 mb-6">
+                    <button id="tab-login" onclick="switchAuthMode('login')" class="font-bold text-xl px-4 border-b-4 border-yellow-400">勇者登入</button>
+                    <button id="tab-register" onclick="switchAuthMode('register')" class="font-bold text-xl px-4 text-gray-400">新兵註冊</button>
+                </div>
+
+                <div class="w-full max-sm:px-4 max-w-sm space-y-3">
+                    <input type="text" id="auth-username" class="input-box w-full text-lg" placeholder="帳號">
+                    <input type="password" id="auth-password" class="input-box w-full text-lg" placeholder="密碼">
+                    <input type="password" id="auth-password-confirm" class="input-box w-full text-lg hidden" placeholder="再次確認密碼">
+                </div>
+
+                <button id="auth-submit-btn" onclick="handleAuth()" class="btn-primary mt-6 px-12 py-3 text-xl font-black text-gray-800 rounded-2xl">
+                    立即登入
+                </button>
+                <p id="auth-msg" class="mt-4 font-bold text-red-500 min-h-[1.5rem]"></p>
+            </div>
+
+            <!-- 地圖畫面 -->
+            <div id="map-screen" class="cute-card p-12 hidden flex flex-col items-center justify-center">
+                <div class="absolute top-8 left-8 flex items-center gap-2">
+                    <span id="user-info" class="bg-gray-800 text-white px-4 py-2 rounded-xl font-bold"></span>
+                    <button onclick="logout()" class="text-sm text-gray-400 underline ml-2">登出</button>
+                </div>
+                <div id="admin-entry" class="absolute top-8 right-8 hidden">
+                    <button onclick="toggleAdminPanel(true)" class="bg-indigo-600 text-white px-6 py-2 rounded-xl font-black border-4 border-gray-800 shadow-[4px_4px_0px_#1f2937]">帳號管理</button>
+                </div>
+
+                <h1 class="text-5xl font-black mb-10" style="font-family: 'ZCOOL KuaiLe', sans-serif;">闖關地圖 🏆</h1>
+                <div id="level-container" class="grid grid-cols-5 gap-6 w-full"></div>
+            </div>
+
+            <!-- 遊戲畫面 -->
+            <div id="game-screen" class="cute-card hidden">
+                <div class="absolute top-6 left-6 right-6 flex justify-between items-center z-10">
+                    <button onclick="showMap()" class="bg-white border-4 border-gray-800 px-4 py-2 rounded-xl font-bold">⬅ 返回</button>
+                    <div class="flex gap-4">
+                        <span class="status-pill bg-green-400 text-white">✓ <span id="correct-count">0</span></span>
+                        <span class="status-pill bg-red-400 text-white">✗ <span id="wrong-count">0</span></span>
+                    </div>
+                    <div class="font-black text-2xl" id="step-info">1 / 10</div>
+                </div>
+                <div class="horizontal-layout">
+                    <div class="left-panel group cursor-pointer" onclick="speakCurrentWord()" id="main-display">
+                        <div id="word-icon" class="text-[12rem] mb-4">🍎</div>
+                        <!-- 新增發音按鈕 -->
+                        <div id="speaker-btn" class="flex items-center gap-3 bg-white border-4 border-gray-800 px-6 py-2 rounded-2xl shadow-[4px_4px_0px_#1f2937] hover:scale-105 active:scale-95 transition-transform">
+                            <span class="text-3xl">🔊</span>
+                            <span class="text-xl font-black">點擊聽音</span>
+                        </div>
+                        <h2 id="chinese-word" class="text-6xl font-black text-gray-800 mt-6">蘋果</h2>
+                        <div class="absolute bottom-0 left-0 w-full h-4 bg-gray-200">
+                            <div id="progress-bar" class="h-full bg-yellow-400 transition-all duration-500" style="width: 10%"></div>
+                        </div>
+                    </div>
+                    <div class="right-panel">
+                        <div class="space-y-8">
+                            <div class="text-center">
+                                <p class="text-gray-400 font-bold mb-2">聽音辨位：請拼寫單字</p>
+                                <input type="text" id="answer-input" autocomplete="off" class="input-box w-full py-6 text-5xl focus:outline-none focus:ring-8 focus:ring-yellow-200" placeholder="...">
+                            </div>
+                            <button onclick="checkAnswer()" class="btn-primary w-full py-6 text-3xl font-black text-gray-800 rounded-3xl">確認！</button>
+                            <p id="feedback" class="text-center font-black text-2xl h-10"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 結算畫面 -->
+            <div id="result-screen" class="cute-card hidden">
+                <div class="horizontal-layout">
+                    <div class="left-panel bg-blue-50">
+                        <div id="final-emoji" class="text-[10rem] mb-4">🎉</div>
+                        <h2 class="text-5xl font-black text-gray-800" id="result-title">關卡完成！</h2>
+                        <div class="mt-4 flex gap-4">
+                             <div class="bg-white border-4 border-gray-800 px-6 py-2 rounded-2xl font-black">對了 <span id="res-correct" class="text-green-500">0</span></div>
+                             <div class="bg-white border-4 border-gray-800 px-6 py-2 rounded-2xl font-black">錯了 <span id="res-wrong" class="text-red-500">0</span></div>
+                        </div>
+                    </div>
+                    <div class="right-panel">
+                        <h3 class="text-2xl font-black mb-4">📖 學習清單回顧</h3>
+                        <div id="result-lists" class="overflow-y-auto flex-grow pr-2 space-y-4"></div>
+                        <button onclick="showMap()" class="btn-primary mt-6 py-4 text-2xl font-black rounded-3xl w-full">回到闖關地圖</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        /**
+         * 核心：語音功能 (TTS)
+         */
+        function speakWord(text) {
+            // 先取消目前所有正在播放的語音
+            window.speechSynthesis.cancel();
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US'; // 設定為美式英文
+            utterance.rate = 0.8;      // 稍微放慢語速，方便學習者聽清楚
+            utterance.pitch = 1.1;     // 稍微提高音調，更有親和力
+            
+            const speakerBtn = document.getElementById('speaker-btn');
+            utterance.onstart = () => speakerBtn.classList.add('speaking');
+            utterance.onend = () => speakerBtn.classList.remove('speaking');
+            
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function speakCurrentWord() {
+            const word = gameWords[currentIndex];
+            if (word) speakWord(word.en);
+        }
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+            
+            if (type === 'correct') {
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(523.25, now); 
+                oscillator.frequency.exponentialRampToValueAtTime(1046.50, now + 0.1);
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                oscillator.start(now);
+                oscillator.stop(now + 0.5);
+            } else if (type === 'wrong') {
+                oscillator.type = 'square'; 
+                oscillator.frequency.setValueAtTime(100, now);
+                oscillator.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+                gainNode.gain.setValueAtTime(0.4, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.3);
+                oscillator.start(now);
+                oscillator.stop(now + 0.3);
+            }
+        }
+
+        const levels = [
+            [{ en: 'apple', cn: '蘋果', icon: '🍎' }, { en: 'banana', cn: '香蕉', icon: '🍌' }, { en: 'orange', cn: '橘子', icon: '🍊' }, { en: 'grape', cn: '葡萄', icon: '🍇' }, { en: 'lemon', cn: '檸檬', icon: '🍋' }, { en: 'pear', cn: '梨子', icon: '🍐' }, { en: 'peach', cn: '桃子', icon: '🍑' }, { en: 'melon', cn: '甜瓜', icon: '🍈' }, { en: 'cherry', cn: '櫻桃', icon: '🍒' }, { en: 'berry', cn: '莓果', icon: '🍓' }],
+            [{ en: 'cat', cn: '貓咪', icon: '🐱' }, { en: 'dog', cn: '狗狗', icon: '🐶' }, { en: 'pig', cn: '小豬', icon: '🐷' }, { en: 'bird', cn: '小鳥', icon: '🐦' }, { en: 'fish', cn: '小魚', icon: '🐟' }, { en: 'lion', cn: '獅子', icon: '🦁' }, { en: 'tiger', cn: '老虎', icon: '🐯' }, { en: 'bear', cn: '熊熊', icon: '🐻' }, { en: 'rabbit', cn: '兔子', icon: '🐰' }, { en: 'monkey', cn: '猴子', icon: '🐒' }],
+            [{ en: 'sun', cn: '太陽', icon: '☀️' }, { en: 'moon', cn: '月亮', icon: '🌙' }, { en: 'star', cn: '星星', icon: '⭐' }, { en: 'cloud', cn: '雲朵', icon: '☁️' }, { en: 'rain', cn: '下雨', icon: '🌧️' }, { en: 'snow', cn: '下雪', icon: '❄️' }, { en: 'tree', cn: '大樹', icon: '🌳' }, { en: 'flower', cn: '花朵', icon: '🌻' }, { en: 'water', cn: '水', icon: '💧' }, { en: 'fire', cn: '火焰', icon: '🔥' }],
+            [{ en: 'book', cn: '書本', icon: '📖' }, { en: 'pen', cn: '原子筆', icon: '🖊️' }, { en: 'box', cn: '盒子', icon: '📦' }, { en: 'bag', cn: '包包', icon: '🎒' }, { en: 'hat', cn: '帽子', icon: '🧢' }, { en: 'door', cn: '門口', icon: '🚪' }, { en: 'chair', cn: '椅子', icon: '🪑' }, { en: 'lamp', cn: '燈', icon: '💡' }, { en: 'phone', cn: '電話', icon: '📱' }, { en: 'clock', cn: '時鐘', icon: '⏰' }],
+            [{ en: 'head', cn: '頭', icon: '👤' }, { en: 'eye', cn: '眼睛', icon: '👁️' }, { en: 'ear', cn: '耳朵', icon: '👂' }, { en: 'nose', cn: '鼻子', icon: '👃' }, { en: 'mouth', cn: '嘴巴', icon: '👄' }, { en: 'hand', cn: '手', icon: '✋' }, { en: 'foot', cn: '腳', icon: '👣' }, { en: 'run', cn: '跑', icon: '🏃' }, { en: 'jump', cn: '跳', icon: '🦘' }, { en: 'sing', cn: '唱', icon: '🎤' }]
+        ];
+
+        const STORAGE_KEY = 'word_challenge_final_v1';
+        let currentUsername = null;
+        let authMode = 'login'; 
+        let currentLevelIndex = 0;
+        let gameWords = [];
+        let currentIndex = 0;
+        let stats = { correct: 0, wrong: 0 };
+        let sessionData = { correctList: [], wrongList: [] };
+
+        function getAccounts() { 
+            const data = localStorage.getItem(STORAGE_KEY);
+            return data ? JSON.parse(data) : {}; 
+        }
+        function saveAccounts(accounts) { 
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts)); 
+        }
+
+        function initApp() {
+            let accounts = getAccounts();
+            if (!accounts['admin']) {
+                accounts['admin'] = { password: 'admin', level: 4 };
+                saveAccounts(accounts);
+            }
+        }
+
+        function switchAuthMode(mode) {
+            authMode = mode;
+            document.getElementById('auth-emoji').innerText = mode === 'login' ? '🔐' : '🎖️';
+            document.getElementById('tab-login').className = mode === 'login' ? 'font-bold text-xl px-4 border-b-4 border-yellow-400' : 'font-bold text-xl px-4 text-gray-400';
+            document.getElementById('tab-register').className = mode === 'register' ? 'font-bold text-xl px-4 border-b-4 border-yellow-400' : 'font-bold text-xl px-4 text-gray-400';
+            document.getElementById('auth-submit-btn').innerText = mode === 'login' ? '立即登入挑戰' : '完成註冊並登入';
+            document.getElementById('auth-password-confirm').classList.toggle('hidden', mode === 'login');
+            
+            document.getElementById('auth-username').value = '';
+            document.getElementById('auth-password').value = '';
+            document.getElementById('auth-password-confirm').value = '';
+            document.getElementById('auth-msg').innerText = '';
+            document.getElementById('auth-username').focus();
+        }
+
+        function handleAuth() {
+            const user = document.getElementById('auth-username').value.trim();
+            const pass = document.getElementById('auth-password').value.trim();
+            const confirmPass = document.getElementById('auth-password-confirm').value.trim();
+            const msg = document.getElementById('auth-msg');
+            let accounts = getAccounts();
+
+            if (!user || !pass) { msg.innerText = '請填寫帳號密碼'; return; }
+
+            if (authMode === 'register') {
+                if (accounts[user]) { msg.innerText = '此帳號已被佔用'; return; }
+                if (pass !== confirmPass) { msg.innerText = '兩次密碼輸入不一致'; return; }
+                accounts[user] = { password: pass, level: 0 };
+                saveAccounts(accounts);
+                msg.className = "mt-4 font-bold text-green-500 min-h-[1.5rem]";
+                msg.innerText = '註冊成功！準備出發...';
+                setTimeout(() => { currentUsername = user; enterMap(); }, 800);
+            } else {
+                if (accounts[user] && String(accounts[user].password) === String(pass)) {
+                    currentUsername = user;
+                    enterMap();
+                } else { 
+                    msg.innerText = accounts[user] ? '密碼錯誤' : '帳號不存在'; 
+                }
+            }
+        }
+
+        function enterMap() {
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('map-screen').classList.remove('hidden');
+            document.getElementById('user-info').innerText = `勇者：${currentUsername}`;
+            if (currentUsername === 'admin') document.getElementById('admin-entry').classList.remove('hidden');
+            renderMap();
+        }
+
+        window.toggleAdminPanel = function(show) {
+            const panel = document.getElementById('admin-panel');
+            panel.style.display = show ? 'flex' : 'none';
+            if (show) window.refreshAdminUserList();
+        }
+
+        window.refreshAdminUserList = function() {
+            const list = document.getElementById('admin-user-list');
+            const accounts = getAccounts();
+            list.innerHTML = '';
+            Object.keys(accounts).forEach(uname => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-gray-200 hover:bg-white";
+                tr.innerHTML = `
+                    <td class="p-3 font-bold">${uname}</td>
+                    <td class="p-3 text-gray-500 font-mono">${accounts[uname].password}</td>
+                    <td class="p-3 text-center"><span class="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full font-bold text-sm">Level ${accounts[uname].level + 1}</span></td>
+                    <td class="p-3 text-center">${uname !== 'admin' ? `<button onclick="window.adminDeleteUser('${uname}')" class="bg-red-500 text-white px-4 py-2 rounded-lg font-bold">刪除</button>` : '---'}</td>
+                `;
+                list.appendChild(tr);
+            });
+        }
+
+        window.adminDeleteUser = function(uname) {
+            let accounts = getAccounts();
+            if (accounts[uname]) {
+                delete accounts[uname];
+                saveAccounts(accounts);
+                window.refreshAdminUserList();
+            }
+        };
+
+        function renderMap() {
+            const container = document.getElementById('level-container');
+            const accounts = getAccounts();
+            const unlocked = accounts[currentUsername]?.level || 0;
+            container.innerHTML = '';
+            levels.forEach((_, i) => {
+                const btn = document.createElement('button');
+                const isLocked = i > unlocked;
+                btn.className = `p-6 rounded-3xl border-4 transition-all flex flex-col items-center gap-2 ${isLocked ? 'bg-gray-100 text-gray-300 border-gray-200 cursor-not-allowed' : 'btn-primary'}`;
+                btn.innerHTML = `<div class="text-3xl">${isLocked ? '🔒' : (i < unlocked ? '✅' : '🚩')}</div><div class="font-bold">Level ${i+1}</div>`;
+                if(!isLocked) btn.onclick = () => startLevel(i);
+                container.appendChild(btn);
+            });
+        }
+
+        function startLevel(index) {
+            currentLevelIndex = index;
+            gameWords = [...levels[index]].sort(() => 0.5 - Math.random());
+            currentIndex = 0; stats = { correct: 0, wrong: 0 }; sessionData = { correctList: [], wrongList: [] };
+            document.getElementById('map-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+            updateUI();
+        }
+
+        function showMap() {
+            document.getElementById('game-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.add('hidden');
+            document.getElementById('map-screen').classList.remove('hidden');
+            renderMap();
+        }
+
+        function updateUI() {
+            const word = gameWords[currentIndex];
+            document.getElementById('word-icon').innerText = word.icon;
+            document.getElementById('chinese-word').innerText = word.cn;
+            document.getElementById('answer-input').value = '';
+            document.getElementById('answer-input').focus();
+            document.getElementById('feedback').innerText = '';
+            document.getElementById('correct-count').innerText = stats.correct;
+            document.getElementById('wrong-count').innerText = stats.wrong;
+            document.getElementById('step-info').innerText = `${currentIndex + 1} / 10`;
+            document.getElementById('progress-bar').style.width = `${(currentIndex + 1) * 10}%`;
+            
+            // 重要：新題目出現時自動發音
+            setTimeout(() => speakCurrentWord(), 400);
+        }
+
+        function checkAnswer() {
+            const input = document.getElementById('answer-input');
+            const feedback = document.getElementById('feedback');
+            const pop = document.getElementById('error-pop');
+            const userAnswer = input.value.trim().toLowerCase();
+            const currentWord = gameWords[currentIndex];
+
+            if (userAnswer === currentWord.en.toLowerCase()) {
+                stats.correct++;
+                sessionData.correctList.push(currentWord);
+                playSound('correct');
+                confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+                feedback.innerText = '✨ Correct! ✨';
+                feedback.className = 'text-center font-black text-green-500 text-3xl animate-bounce';
+                setTimeout(nextQuestion, 800);
+            } else {
+                stats.wrong++;
+                sessionData.wrongList.push({ ...currentWord, userGot: userAnswer || '(空白)' });
+                playSound('wrong');
+                pop.classList.remove('error-active');
+                void pop.offsetWidth; 
+                pop.classList.add('error-active');
+                feedback.innerText = `Correct: ${currentWord.en}`;
+                feedback.className = 'text-center font-black text-red-500 text-2xl';
+                
+                // 答錯時再唸一次正確發音，加深印象
+                speakCurrentWord();
+                setTimeout(nextQuestion, 2000);
+            }
+        }
+
+        function nextQuestion() {
+            currentIndex++;
+            if (currentIndex < 10) updateUI(); else showResult();
+        }
+
+        function showResult() {
+            document.getElementById('game-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.remove('hidden');
+            const accounts = getAccounts();
+            if (stats.correct === 10 && currentLevelIndex === accounts[currentUsername].level && currentLevelIndex < 4) {
+                accounts[currentUsername].level++;
+                saveAccounts(accounts);
+            }
+            document.getElementById('res-correct').innerText = stats.correct;
+            document.getElementById('res-wrong').innerText = stats.wrong;
+            const listContainer = document.getElementById('result-lists');
+            listContainer.innerHTML = '';
+
+            if (sessionData.wrongList.length > 0) {
+                const wrongDiv = document.createElement('div');
+                wrongDiv.innerHTML = `<h4 class="text-red-500 font-black mb-2">❌ 需要加強</h4>`;
+                sessionData.wrongList.forEach(w => {
+                    wrongDiv.innerHTML += `
+                        <div class="flex items-center justify-between bg-red-50 p-3 rounded-2xl mb-2">
+                            <span class="text-2xl">${w.icon} ${w.en}</span>
+                            <button onclick="speakWord('${w.en}')" class="bg-white border-2 border-red-200 px-3 py-1 rounded-lg">🔊</button>
+                        </div>
+                    `;
+                });
+                listContainer.appendChild(wrongDiv);
+            }
+        }
+
+        function logout() { 
+            currentUsername = null;
+            document.getElementById('map-screen').classList.add('hidden');
+            document.getElementById('auth-screen').classList.remove('hidden');
+        }
+        
+        document.getElementById('answer-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') checkAnswer(); });
+    </script>
+</body>
+</html>
